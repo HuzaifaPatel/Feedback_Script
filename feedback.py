@@ -1,55 +1,103 @@
 import os
 import csv
+import shutil
+DIR_PATH = "/home/huzi/Downloads/brightspace_submissions"
+CSV_PATH = "/home/huzi/Downloads/a2.csv"
+# OrgDefinedId means student number. example #123456789. Must include hashtag
+# username means student name (#firstnamelastname) order matters, no spaces, hashtag must be included
+# Third header is assignment title (get it from brightspace)
+# Fourth Header is where the feedback will go
+# Fifth Header denotes the EOL
+#only header that should EVER change is the third one (assignment name)
+headers = ['OrgDefinedId', 'Last_Name', 'First_Name', 'Username', 'A2: Rookit Points Grade', 'Participation Text Grade', 'End-of-Line Indicator']
 
-DIR_PATH = "C:\\Users\\huzai\\Downloads\\A1 Race conditions and access control Download Feb 16, 2024 835 PM"
-CSV_PATH = "C:\\Users\\huzai\\Desktop\\A1.csv"
-name = []
-feedback = []
+#this is where we write all the data to
+filename = 'data.csv'
 
-def remove_contents():
+
+data = {} # key is student name without commas. value is as follows: [student number, name (with commas), grade, feedback]
+def remove_contents_from_directories():
+	os.chdir(DIR_PATH)
 	for file_path in os.listdir(DIR_PATH):
-		os.chdir(DIR_PATH)
 		if os.path.isdir(file_path):
-			os.chdir(DIR_PATH + "\\" + file_path)
+			os.chdir(DIR_PATH + "/" + file_path)
+			print(DIR_PATH + "/" + file_path)
 			for file in os.listdir():
-				os.remove(file)
+				if os.path.isdir(file):
+					shutil.rmtree(file)
+				else:
+					os.remove(file)
+		os.chdir(DIR_PATH)
 
-def get_student_number():
-	for file in os.listdir(DIR_PATH):
-		if os.path.isdir(file):
-			lis = file.split(" ")
-			lis = lis[2:-5]
-			student_number = lis[-1][:-1]
-			lis = lis[:-1]
-			name = " ".join(lis)
-			print(name)
-			print(student_number)
-			
+# we get the student number from the directory names given by brightspace
+def get_student_number(file):
+	lis = file.split(" ")
+	lis = lis[2:-5]
+	return "#"+lis[-1][:-1]
+
+
+def get_student_name(file):
+	lis = file.split(" ")
+	lis = lis[2:-6]
+	name = " ".join(lis)
+	data[name] = []
+	data[name].append(get_student_number(file))
+
 def get_feedback_data():
 	with open(CSV_PATH, 'r', newline='') as file:
-		reader = csv.reader(file)
-		header = next(reader)
+		reader = csv.DictReader(file)
 		for row in reader:
-			if len(row[0]) != 0:
-				name.append(row[0])
-				feedback.append(row[27])
+			name = row['Student_Name'].replace(", ", " ")
+			if name in data:
+				data[name].append(row['Student_Name'].split(", ")[0])
+				data[name].append(row['Student_Name'].split(", ")[1])
+				data[name].append("#" + " ".join(row['Student_Name'].split(", ")[::-1]).lower().replace(" ", ""))
+				if float(row['Mark']) < 0:
+					data[name].append(0)
+				data[name].append(round(float(row['Mark']), 2))
+				data[name].append((row['Comment2']))
+				data[name].append("#") # add EOL
+
+
+#make sure only brightspace folders are in folder
+def construct_prereq_data():
+	os.chdir(DIR_PATH)
+	for file_path in os.listdir(DIR_PATH):
+		if os.path.isdir(file_path):
+			get_student_name(file_path)
+	get_feedback_data()
 
 
 def construct_feedback_file():
 	os.chdir(DIR_PATH)
-	for student in range(len(name)):
+	for student in data:
 		for file_path in os.listdir(DIR_PATH):
 			if os.path.isdir(file_path):
-				new_name = name[student].replace(",","")
-				if new_name in file_path:
-					os.chdir(DIR_PATH + "\\" + file_path)
-					file = open(DIR_PATH + "\\" + file_path + "\\feedback.txt", 'a+')
-					file.write(feedback[student])
+				if student in file_path:
+					os.chdir(DIR_PATH + "/" + file_path)
+					file = open(DIR_PATH + "/" + file_path + "/feedback.txt", 'a+')
+					file.write(str(data[student][5]))
 					file.close()
 					os.chdir(DIR_PATH)
 
+def create_csv_file():
+	os.chdir(DIR_PATH)
+	with open(filename, mode='w', newline='') as file:
+		writer = csv.writer(file)
+    	# Write the header row
+		writer.writerow(headers)
 
-get_feedback_data()
-remove_contents()
+		for student_name in data:
+			writer.writerows([data[student_name]])
+
+
+#run this first
+remove_contents_from_directories()
+
+# #run this second. Here, we get student number, student name, and feedback
+construct_prereq_data()
+
+# # run this last
 construct_feedback_file()
-# get_student_number()
+
+create_csv_file()
